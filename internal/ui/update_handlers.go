@@ -4,8 +4,8 @@ import (
 	"math/rand/v2"
 	"strings"
 
-	"github.com/superstarryeyes/bit/ansifonts"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/superstarryeyes/bit/ansifonts"
 )
 
 // handleWindowResize handles terminal window resize events
@@ -82,10 +82,10 @@ func (m *model) handleExportModeKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			}
 		}
 		return m, nil
-	case "left":
+	case "shift+tab":
 		m.cycleExportFormat(-1)
 		return m, nil
-	case "right":
+	case "tab":
 		m.cycleExportFormat(1)
 		return m, nil
 	default:
@@ -173,6 +173,14 @@ func (m *model) handleTextPanelUpdate(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		// Not focused, handle as special command
 		return m, nil
+	case "k", "j":
+		if m.textInput.mode == TextEntryMode && m.textInput.input.Focused() {
+			// Let text input process the key
+			m.textInput.input, cmd = m.textInput.input.Update(msg)
+			return m, cmd
+		} else if m.textInput.mode == TextAlignmentMode {
+			m.handleTextAlignment(msg.String())
+		}
 	default:
 		if m.textInput.input.Focused() {
 			m.textInput.input, cmd = m.textInput.input.Update(msg)
@@ -196,7 +204,7 @@ func (m *model) handleMultiRowNavigation(direction string) {
 		m.textInput.rowCursors[m.textInput.currentRow] = m.textInput.input.Position()
 	}
 
-	if direction == "up" {
+	if isUpKey(direction) {
 		if m.textInput.currentRow > 0 {
 			m.textInput.textRows[m.textInput.currentRow] = m.textInput.input.Value()
 			m.textInput.currentRow--
@@ -219,7 +227,7 @@ func (m *model) handleMultiRowNavigation(direction string) {
 				m.textInput.input.SetCursor(0)
 			}
 		}
-	} else if direction == "down" {
+	} else if isDownKey(direction) {
 		m.textInput.textRows[m.textInput.currentRow] = m.textInput.input.Value()
 		if m.textInput.currentRow < len(m.textInput.textRows)-1 {
 			m.textInput.currentRow++
@@ -256,7 +264,7 @@ func (m *model) handleMultiRowNavigation(direction string) {
 
 // handleTextAlignment handles text alignment changes
 func (m *model) handleTextAlignment(direction string) {
-	if direction == "up" {
+	if isUpKey(direction) {
 		m.textInput.alignment = TextAlignment((int(m.textInput.alignment) - 1 + int(TotalAlignments)) % int(TotalAlignments))
 	} else {
 		m.textInput.alignment = TextAlignment((int(m.textInput.alignment) + 1) % int(TotalAlignments))
@@ -318,11 +326,11 @@ func (m *model) handleTextInputToggle() {
 
 // handleFontPanelUpdate handles updates for the font selection panel (panel 1)
 func (m *model) handleFontPanelUpdate(msg tea.KeyMsg) {
-	switch msg.String() {
-	case "up":
+	switch {
+	case isUpKey(msg.String()):
 		m.font.selectedFont = (m.font.selectedFont - 1 + len(m.font.fonts)) % len(m.font.fonts)
 		m.renderText()
-	case "down":
+	case isDownKey(msg.String()):
 		m.font.selectedFont = (m.font.selectedFont + 1) % len(m.font.fonts)
 		m.renderText()
 	}
@@ -333,9 +341,9 @@ func (m *model) handleSpacingPanelUpdate(msg tea.KeyMsg) {
 	switch msg.String() {
 	case "tab":
 		m.spacing.mode = SpacingMode((int(m.spacing.mode) + 1) % int(TotalSpacingModes))
-	case "up", "down":
+	case "up", "down", "k", "j":
 		direction := 1
-		if msg.String() == "up" {
+		if isUpKey(msg.String()) {
 			direction = 1
 		} else {
 			direction = -1
@@ -385,12 +393,12 @@ func (m *model) adjustLineSpacing(direction int) {
 
 // handleColorPanelUpdate handles updates for the color panel
 func (m *model) handleColorPanelUpdate(msg tea.KeyMsg) {
-	switch msg.String() {
-	case "tab":
+	switch {
+	case msg.String() == "tab":
 		m.color.subMode = ColorSubMode((int(m.color.subMode) + 1) % int(TotalColorSubModes))
-	case "up", "down":
+	case isUpKey(msg.String()), isDownKey(msg.String()):
 		direction := -1
-		if msg.String() == "down" {
+		if isDownKey(msg.String()) {
 			direction = 1
 		}
 
@@ -415,13 +423,13 @@ func (m *model) handleColorPanelUpdate(msg tea.KeyMsg) {
 
 // handleScalePanelUpdate handles updates for the scale panel
 func (m *model) handleScalePanelUpdate(msg tea.KeyMsg) {
-	switch msg.String() {
-	case "up":
+	switch {
+	case isUpKey(msg.String()):
 		if m.scale.scale < MaxScale {
 			m.scale.scale++
 			m.renderText()
 		}
-	case "down":
+	case isDownKey(msg.String()):
 		if m.scale.scale > MinScale {
 			m.scale.scale--
 			m.renderText()
@@ -469,10 +477,10 @@ func (m *model) updateShadowWarning() {
 
 // handleShadowPanelUpdate handles updates for the shadow panel
 func (m *model) handleShadowPanelUpdate(msg tea.KeyMsg) {
-	switch msg.String() {
-	case "tab":
+	switch {
+	case msg.String() == "tab":
 		m.shadow.subMode = ShadowSubMode((int(m.shadow.subMode) + 1) % int(TotalShadowSubModes))
-	case "up", "down":
+	case isUpKey(msg.String()), isDownKey(msg.String()):
 		switch m.shadow.subMode {
 		case HorizontalShadowMode:
 			m.handleHorizontalShadow(msg.String())
@@ -490,7 +498,7 @@ func (m *model) handleShadowPanelUpdate(msg tea.KeyMsg) {
 
 // handleHorizontalShadow handles horizontal shadow adjustments
 func (m *model) handleHorizontalShadow(direction string) {
-	if direction == "up" {
+	if isUpKey(direction) {
 		m.shadow.horizontalIndex = (m.shadow.horizontalIndex + 1) % len(shadowPixelOptions)
 	} else {
 		m.shadow.horizontalIndex = (m.shadow.horizontalIndex - 1 + len(shadowPixelOptions)) % len(shadowPixelOptions)
@@ -503,7 +511,7 @@ func (m *model) handleHorizontalShadow(direction string) {
 
 // handleVerticalShadow handles vertical shadow adjustments
 func (m *model) handleVerticalShadow(direction string) {
-	if direction == "up" {
+	if isUpKey(direction) {
 		m.shadow.verticalIndex = (m.shadow.verticalIndex + 1) % len(verticalShadowPixelOptions)
 	} else {
 		m.shadow.verticalIndex = (m.shadow.verticalIndex - 1 + len(verticalShadowPixelOptions)) % len(verticalShadowPixelOptions)
@@ -516,7 +524,7 @@ func (m *model) handleVerticalShadow(direction string) {
 
 // handleShadowStyle handles shadow style changes
 func (m *model) handleShadowStyle(direction string) {
-	if direction == "up" {
+	if isUpKey(direction) {
 		m.shadow.style = (m.shadow.style + 1) % len(shadowStyleOptions)
 	} else {
 		m.shadow.style = (m.shadow.style - 1 + len(shadowStyleOptions)) % len(shadowStyleOptions)

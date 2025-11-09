@@ -5,10 +5,10 @@ import (
 	"os"
 	"strings"
 
-	"github.com/superstarryeyes/bit/internal/export"
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/superstarryeyes/bit/internal/export"
 )
 
 func InitialModel() (model, error) {
@@ -129,7 +129,6 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		return m, m.handleWindowResize(msg)
-
 	case tea.KeyMsg:
 		// Handle export mode first
 		if m.export.active {
@@ -139,59 +138,83 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Reset confirmations on any key press
 		m.resetConfirmations()
 
-		switch msg.String() {
-		case "ctrl+c", "esc":
-			return m, tea.Quit
+		if !m.isInputMode() {
+			return m.handleNormalModeKeys(msg)
+		} else {
+			return m.handleInputModeKeys(msg)
+		}
+	}
 
-		case "e":
-			// Only enter export mode if text input is not focused
-			if !(m.uiState.focusedPanel == TextInputPanel && m.textInput.mode == TextEntryMode && m.textInput.input.Focused()) {
-				m.handleEnterExportMode()
-				return m, nil
-			}
-			// If text input is focused, let it process the "e" normally
-			fallthrough
+	return m, cmd
+}
 
-		case "r":
-			// Only randomize when not in text input mode
-			if !(m.uiState.focusedPanel == TextInputPanel && m.textInput.mode == TextEntryMode && m.textInput.input.Focused()) {
-				m.handleRandomize()
-				return m, nil
-			}
-			// If text input is focused, let it process the "r" normally
-			fallthrough
+// handleInputModeKeys handles key presses while in input mode
+func (m *model) handleInputModeKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	var cmd tea.Cmd
 
-		default:
-			// Handle text input when focused
-			if m.textInput.input.Focused() {
-				m.textInput.input, cmd = m.textInput.input.Update(msg)
-				return m, cmd
-			}
+	switch msg.String() {
+	case "ctrl+c", "esc":
+		return m, tea.Quit
+	case "tab":
+		return m, m.handleTabKey()
+	case "shift+tab":
+		m.uiState.focusedPanel = FocusedPanel((int(m.uiState.focusedPanel) - 1 + int(TotalPanels)) % int(TotalPanels))
+		m.textInput.input.Blur()
+	case "left":
+		return m.handlePanelNavigation(-1)
+	case "right":
+		return m.handlePanelNavigation(1)
+	case "up", "down":
+		return m, m.handleUpDownKeys(msg)
+	case "enter":
+		return m, m.handleEnterKey()
+	default:
+		// Handle text input when focused
+		if m.textInput.input.Focused() {
+			m.textInput.input, cmd = m.textInput.input.Update(msg)
+		} else if m.export.filenameInput.Focused() {
 			// Handle filename input when focused
-			if m.export.filenameInput.Focused() {
-				m.export.filenameInput, cmd = m.export.filenameInput.Update(msg)
-				return m, cmd
-			}
-			return m, cmd
+			m.export.filenameInput, cmd = m.export.filenameInput.Update(msg)
+		}
+	}
 
-		case "tab":
-			return m, m.handleTabKey()
+	return m, cmd
+}
 
-		case "shift+tab":
-			m.uiState.focusedPanel = FocusedPanel((int(m.uiState.focusedPanel) - 1 + int(TotalPanels)) % int(TotalPanels))
-			m.textInput.input.Blur()
+// handleNormalModeKeys handles key presses while in normal mode
+// Normal mode is when keystrokes are used to invoke actions instead of as input
+func (m *model) handleNormalModeKeys(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	var cmd tea.Cmd
 
-		case "left":
-			return m.handlePanelNavigation(-1)
-
-		case "right":
-			return m.handlePanelNavigation(1)
-
-		case "up", "down":
-			return m, m.handleUpDownKeys(msg)
-
-		case "enter":
-			return m, m.handleEnterKey()
+	switch msg.String() {
+	case "ctrl+c", "esc":
+		return m, tea.Quit
+	case "tab":
+		return m, m.handleTabKey()
+	case "shift+tab":
+		m.uiState.focusedPanel = FocusedPanel((int(m.uiState.focusedPanel) - 1 + int(TotalPanels)) % int(TotalPanels))
+		m.textInput.input.Blur()
+	case "left", "h":
+		return m.handlePanelNavigation(-1)
+	case "right", "l":
+		return m.handlePanelNavigation(1)
+	case "up", "down", "k", "j":
+		return m, m.handleUpDownKeys(msg)
+	case "enter":
+		return m, m.handleEnterKey()
+	case "q":
+		return m, tea.Quit
+	case "e":
+		m.handleEnterExportMode()
+	case "r":
+		m.handleRandomize()
+	default:
+		// Handle text input when focused
+		if m.textInput.input.Focused() {
+			m.textInput.input, cmd = m.textInput.input.Update(msg)
+		} else if m.export.filenameInput.Focused() {
+			// Handle filename input when focused
+			m.export.filenameInput, cmd = m.export.filenameInput.Update(msg)
 		}
 	}
 
@@ -380,4 +403,16 @@ func (m model) View() string {
 		MaxWidth(m.uiState.width).
 		MaxHeight(m.uiState.height).
 		Render(content)
+}
+
+func isUpKey(txt string) bool {
+	return txt == "up" || txt == "k"
+}
+
+func isDownKey(txt string) bool {
+	return txt == "down" || txt == "j"
+}
+
+func (m *model) isInputMode() bool {
+	return m.uiState.focusedPanel == TextInputPanel && m.textInput.mode == TextEntryMode && m.textInput.input.Focused()
 }
