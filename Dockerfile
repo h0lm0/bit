@@ -14,11 +14,10 @@ CMD ["tail", "-f", "/dev/null"]
 
 FROM alpine:3.22 AS bit
 
-WORKDIR /app
-
 RUN adduser -H -D -u 1000 -s /sbin/nologin app
 
 USER app
+WORKDIR /app
 
 COPY --from=go_builder /app/bit /app/bit
 
